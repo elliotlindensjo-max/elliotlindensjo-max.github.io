@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Framvinge i markeffekt · Elliot Lindensjö</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout: en mörk "vindtunnel"-värld. Smal läskolumn för text, breda band för CFD-bilder; tidslinje för iterationerna. */
+:root {
+  color-scheme: dark;
+  --bg: #0a0d13;
+  --panel: #10141c;
+  --line: #222a37;
+  --ink: #e8ecf2;
+  --ink-2: #a9b3c3;
+  --ink-3: #6f7a8c;
+  --accent: #4cc3e0;      /* luft / hastighet */
+  --sep: #ff3df2;         /* backflöde, samma som i bilderna */
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #9085e9;
+  --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body { font: 400 17px/1.6 var(--body); }
+img, video { max-width: 100%; display: block; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; text-wrap: balance; letter-spacing: .01em; margin: 0; }
+h1 { font-size: clamp(44px, 7vw, 84px); line-height: .95; text-transform: uppercase; }
+h2 { font-size: clamp(30px, 4vw, 42px); line-height: 1.05; text-transform: uppercase; }
+h3 { font-size: 26px; line-height: 1.1; }
+p { margin: 0; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.wrap { width: min(1180px, 100% - 40px); margin-inline: auto; }
+.read { max-width: 68ch; }
+.stack { display: grid; gap: 18px; }
+section { padding-block: 72px; border-top: 1px solid var(--line); }
+.label { font: 500 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+
+.topnav { display: flex; justify-content: space-between; gap: 16px; padding-top: 24px; font: 500 13px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.topnav a { color: var(--ink-2); text-decoration: none; } .topnav a:hover { color: var(--accent); }
+/* hero */
+.hero { padding-block: 56px 40px; display: grid; gap: 28px; }
+.hero .kicker { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+.hero .kicker span { font: 500 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-2); padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; }
+.hero .lede { font-size: 20px; color: var(--ink-2); max-width: 62ch; }
+.film { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: #000; }
+.film figcaption, figure figcaption { font-size: 14px; color: var(--ink-3); padding: 10px 2px 0; }
+figure { margin: 0; }
+
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.kpi { background: var(--panel); padding: 20px 20px 18px; display: grid; gap: 6px; }
+.kpi .v { font: 600 40px/1 var(--display); }
+.kpi .v small { font-size: 22px; color: var(--ink-2); margin-left: 2px; }
+.kpi .d { font-size: 14px; color: var(--ink-2); line-height: 1.4; }
+@media (max-width: 760px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* setup */
+.cols { display: grid; grid-template-columns: 1.1fr .9fr; gap: 48px; align-items: start; }
+@media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
+.spec { width: 100%; border-collapse: collapse; font-size: 15px; }
+.spec th, .spec td { text-align: left; padding: 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.spec th { color: var(--ink-3); font-weight: 500; width: 42%; padding-right: 16px; }
+.flow { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 8px; margin-top: 8px; }
+.flow div { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 12px; font-size: 14px; line-height: 1.35; }
+.flow b { display: block; font: 600 18px/1.1 var(--display); text-transform: uppercase; margin-bottom: 4px; color: var(--accent); }
+@media (max-width: 760px) { .flow { grid-template-columns: 1fr 1fr; } }
+
+/* charts */
+.charts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 900px) { .charts { grid-template-columns: 1fr; } }
+.chart { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 18px 18px 10px; position: relative; }
+.chart h3 { font-size: 20px; text-transform: uppercase; }
+.chart .sub { font-size: 13px; color: var(--ink-3); margin: 2px 0 8px; }
+.chart svg { width: 100%; height: auto; overflow: visible; }
+.chart.wide { grid-column: 1 / -1; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--ink-2); margin: 4px 0 6px; }
+.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+.tip { position: absolute; pointer-events: none; background: #1a2030; border: 1px solid #33405a; border-radius: 4px; padding: 7px 9px; font: 13px/1.35 var(--mono); color: var(--ink); white-space: nowrap; opacity: 0; transition: opacity .12s; z-index: 5; }
+.datatable { margin-top: 18px; overflow-x: auto; }
+.datatable table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 640px; }
+.datatable th, .datatable td { padding: 9px 12px; border-bottom: 1px solid var(--line); text-align: right; }
+.datatable th:first-child, .datatable td:first-child { text-align: left; }
+.datatable thead th { color: var(--ink-3); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+.datatable tr.best td { color: var(--ink); background: rgba(76,195,224,.07); }
+
+/* timeline */
+.iters { display: grid; gap: 0; margin-top: 32px; }
+.iter { display: grid; grid-template-columns: 120px 1fr; gap: 28px; padding-block: 40px; border-top: 1px solid var(--line); }
+.iter:first-child { border-top: 0; }
+.iter .tag { position: sticky; top: 20px; align-self: start; display: grid; gap: 8px; }
+.iter .tag .n { font: 700 64px/0.85 var(--display); color: var(--ink); }
+.iter .tag .geo { font: 12px/1.3 var(--mono); color: var(--ink-3); }
+.iter .tag .sw { width: 28px; height: 4px; border-radius: 2px; }
+@media (max-width: 760px) { .iter { grid-template-columns: 1fr; gap: 12px; } .iter .tag { position: static; grid-auto-flow: column; justify-content: start; align-items: end; gap: 14px; } .iter .tag .n { font-size: 48px; } }
+.iter .body { display: grid; gap: 18px; min-width: 0; }
+.facts { display: flex; flex-wrap: wrap; gap: 10px; }
+.fact { border: 1px solid var(--line); border-radius: 4px; padding: 8px 12px; display: grid; gap: 2px; min-width: 120px; }
+.fact .k { font: 500 11px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.fact .val { font: 600 24px/1.1 var(--display); }
+.fact .delta { font: 12px/1.2 var(--mono); color: var(--ink-2); }
+.fact .delta.up { color: #4fd18b; } .fact .delta.down { color: #ff7a6b; }
+.what { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+@media (max-width: 760px) { .what { grid-template-columns: 1fr; } }
+.what div { display: grid; gap: 6px; align-content: start; }
+.what h4 { margin: 0; font: 500 12px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+.what p { color: var(--ink-2); font-size: 16px; }
+.gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.gallery figure.full { grid-column: 1 / -1; }
+@media (max-width: 760px) { .gallery { grid-template-columns: 1fr; } }
+.gallery img { border: 1px solid var(--line); border-radius: 4px; background: var(--panel); cursor: zoom-in; }
+.note { border-left: 3px solid var(--sep); padding: 4px 0 4px 14px; color: var(--ink-2); font-size: 15px; }
+.note.info { border-left-color: var(--accent); }
+
+/* insights */
+.insights { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 28px; }
+@media (max-width: 900px) { .insights { grid-template-columns: 1fr; } }
+.insights div { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 20px; display: grid; gap: 8px; align-content: start; }
+.insights b { font: 600 22px/1.1 var(--display); text-transform: uppercase; }
+.insights p { color: var(--ink-2); font-size: 15px; }
+ol.next { margin: 20px 0 0; padding-left: 22px; display: grid; gap: 12px; color: var(--ink-2); }
+ol.next b { color: var(--ink); font-weight: 600; }
+footer { padding-block: 40px 60px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 14px; display: flex; flex-wrap: wrap; gap: 12px 28px; justify-content: space-between; }
+
+/* lightbox */
+.lb { position: fixed; inset: 0; background: rgba(5,7,10,.92); display: none; align-items: center; justify-content: center; padding: 24px; z-index: 50; cursor: zoom-out; }
+.lb.open { display: flex; }
+.lb img { max-height: 92vh; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<nav class="wrap topnav"><a href="../index.html">← Elliot Lindensjö</a><a href="../index.html#projekt">Alla projekt</a></nav>
+<header class="wrap hero">
+  <div class="kicker"><span>Elliot Lindensjö</span><span>Aerodynamik · CFD</span><span>Projekt 01</span></div>
+  <h1>Framvinge i markeffekt</h1>
+  <p class="lede">En tvåelements framvinge som jag ritade från grunden och förbättrade i fem CFD-iterationer. Målet var mer downforce per newton drag. Varje designändring bygger på vad strömningsbilden visade i föregående körning, främst var och varför flödet släpper från vingen.</p>
+  <figure class="film">
+    <video src="media/framvinge_orbit.mp4" poster="img/hero_poster.jpg" controls muted loop playsinline preload="metadata"></video>
+  </figure>
+  <figcaption style="font-size:14px;color:var(--ink-3);margin-top:-16px">Slutlig design (iteration 5). Ytan är färgad efter tryckkoefficient Cp, strömlinjerna efter lufthastighet. 50 m/s, k-ω SST.</figcaption>
+  <div class="kpis">
+    <div class="kpi"><span class="label">Downforce</span><span class="v num">+45<small>%</small></span><span class="d">1 368 N → 1 977 N, iteration 1 → 5</span></div>
+    <div class="kpi"><span class="label">Effektivitet L/D</span><span class="v num">4,25</span><span class="d">från 4,02 i iteration 1</span></div>
+    <div class="kpi"><span class="label">Backflödesvolym</span><span class="v num">−78<small>%</small></span><span class="d">35 L → 7,5 L separerat flöde runt vingen</span></div>
+    <div class="kpi"><span class="label">Iterationer</span><span class="v num">5</span><span class="d">plus en divergerad körning som jag felsökte och körde om</span></div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap cols">
+    <div class="stack read">
+      <h2>Uppgift och upplägg</h2>
+      <p>Det här var mitt första egna aerodynamikprojekt. Jag ville lära mig hur en framvinge faktiskt arbetar nära marken genom att designa en själv, simulera den och läsa resultaten kritiskt i stället för att bara titta på krafttalen.</p>
+      <p>Vingen har två element: ett främre huvudelement nära marken och ett bakre element (flap) högre upp, samt ändplattor. Markeffekten gör att luften accelererar under vingen och ger ett lågt tryck där, och det är det som genererar downforce. Problemet är att för mycket vinkel eller för lite luft mellan elementen får gränsskiktet att släppa. Då tappar vingen sug och drar i stället mer.</p>
+      <p>Arbetsflödet var detsamma i varje iteration:</p>
+      <div class="flow">
+        <div><b>CAD</b>Ny geometri i Siemens NX: vinklar, korda, höjd</div>
+        <div><b>Nät</b>1,2–1,7 milj. celler</div>
+        <div><b>Lösare</b>Stationär RANS, 1000 iterationer</div>
+        <div><b>Analys</b>Krafter, tryck, snitt, backflöde</div>
+        <div><b>Beslut</b>Vad ändras till nästa iteration och varför</div>
+      </div>
+    </div>
+    <div class="stack">
+      <span class="label">Simuleringsuppsättning</span>
+      <table class="spec">
+        <tr><th>Verktyg</th><td>Siemens NX, SimScale (OpenFOAM), egen efterbehandling i Python/VTK</td></tr>
+        <tr><th>Analys</th><td>Inkompressibel, stationär, SIMPLE</td></tr>
+        <tr><th>Turbulensmodell</th><td>k-ω SST</td></tr>
+        <tr><th>Hastighet</th><td class="num">50 m/s (180 km/h)</td></tr>
+        <tr><th>Mark</th><td>Väggrandvillkor under vingen</td></tr>
+        <tr><th>Spännvidd</th><td class="num">1,2 m mellan ändplattorna</td></tr>
+        <tr><th>Beräkningsdomän</th><td class="num">6 × 8 × 2 m (iteration 1: 3,2 × 6 × 2,2 m)</td></tr>
+        <tr><th>Nät</th><td class="num">1,22–1,74 miljoner celler</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="stack read">
+      <h2>Resultat över iterationerna</h2>
+      <p>Krafterna är medelvärden över de sista 30 % av varje körning, eftersom lösningarna pendlar några procent även när de är konvergerade. Jag hämtade dem från SimScales krafthistorik och kontrollerade dem genom att integrera trycket över vingytan i de nedladdade resultatfälten. De två metoderna skiljer sig mindre än 1 %.</p>
+    </div>
+    <div class="charts" style="margin-top:28px">
+      <div class="chart" id="c-df"><h3>Downforce</h3><p class="sub">N, medel sista 30 %</p></div>
+      <div class="chart" id="c-ld"><h3>L/D</h3><p class="sub">downforce / drag</p></div>
+      <div class="chart" id="c-sep"><h3>Backflödesvolym</h3><p class="sub">liter flöde med Uy &gt; 0 runt vingen</p></div>
+      <div class="chart wide" id="c-conv"><h3>Konvergens</h3><p class="sub">Downforce [N] under lösarens 1000 iterationer. Iteration 2 sparade bara fem punkter.</p><div class="legend" id="conv-legend"></div></div>
+    </div>
+    <div class="datatable">
+      <table>
+        <thead><tr><th>Iteration</th><th>Geometri</th><th>Downforce [N]</th><th>Drag [N]</th><th>L/D</th><th>Backflöde [L]</th><th>Lägsta Cp</th><th>Celler</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="stack read">
+      <h2>Iteration för iteration</h2>
+      <p>Varje steg visar vad jag ändrade, vad som hände och vad strömningsbilden visade. Snitten är tagna mitt på spannet (x = 0) och nära ändplattan (x = 0,40 m). Det magentafärgade området är backflöde, alltså där luften strömmar bakåt längs vingen eftersom gränsskiktet har släppt.</p>
+    </div>
+    <div class="iters" id="iters"></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="stack read">
+      <h2>Vad jag lärde mig</h2>
+    </div>
+    <div class="insights">
+      <div><b>Separation styr allt</b><p>Iteration 2 visade det tydligast: mer anfallsvinkel gav 30 % <em>mindre</em> downforce eftersom båda elementen stallade. Den största förbättringen kom när jag minskade vinklarna och lät luften följa profilerna.</p></div>
+      <div><b>Flödet är tredimensionellt</b><p>Nära ändplattorna låg flödet an på bakre elementet, men mitt på spannet släppte det. Ett enda snitt räcker inte för att avgöra om en vinge fungerar. Jag tittar numera alltid på flera positioner längs spannet.</p></div>
+      <div><b>Kontrollera siffrorna</b><p>Lösningarna pendlar ±3–4 % och en körning divergerade helt. Med medelvärden och en oberoende kraftberäkning visade det sig att iteration 3 och 4 gav lika mycket downforce inom bruset (1 752 mot 1 774 N). Ändringen i iteration 4 gav alltså ingen verklig vinst.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap cols">
+    <div class="stack read">
+      <h2>Nästa steg</h2>
+      <p>Iteration 5 är den bästa versionen hittills, men snitten visar tydligt var det finns mer att hämta.</p>
+      <ol class="next">
+        <li><b>Vridning längs spannet på bakre elementet.</b> Lägre anfallsvinkel mitt på, där flödet släpper, och behållen vinkel ut mot ändplattorna, där det ligger an.</li>
+        <li><b>Ny profil på främre elementet.</b> Bubblan på bakre delen av undersidan finns kvar i alla iterationer, oavsett vinkel. Det tyder på att själva profilformen är begränsningen.</li>
+        <li><b>Nätoberoendestudie och rörlig mark.</b> Verifiera att krafterna inte ändras med finare nät, och simulera marken med rätt relativhastighet.</li>
+      </ol>
+    </div>
+    <figure>
+      <img src="img/it5_sec_mid.jpg" alt="Mittsnitt av iteration 5 med backflöde under bakre elementet" data-zoom>
+      <figcaption>Iteration 5 mitt på spannet. Backflödet under bakre elementet är nästa problem att lösa.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<footer class="wrap">
+  <span>Elliot Lindensjö · Framvinge, projekt 01 · 2026</span>
+  <span>Siemens NX · SimScale · OpenFOAM · Python · VTK · PyVista</span>
+</footer>
+
+<div class="lb" id="lb" role="dialog" aria-label="Förstorad bild"><img alt=""></div>
+<div class="tip" id="tip"></div>
+
+<script>
+const DATA = {"iters": [{"id": "it1", "n": 1, "geo": "Mainplane_4", "df": 1368, "drag": 340, "ld": 4.023529411764706, "sep": 34.62441667333473, "cpmin": -2.976983099489796, "cells": "1,22 M", "title": "Utgångsläge: en frihandsritad vinge", "change": "Första versionen, ritad från grunden: ett lågt huvudelement nära marken och ett bakre element högre upp, med ändplattor som går nästan ned till marken.", "obs": "Huvudelementet ger kraftigt undertryck under framkanten, men bakre elementet bidrar lite: trycket under det är högre och bakom vingen bildas en stor avlöst vak. Mitt på spannet syns också en separationsbubbla på bakre halvan av huvudelementets undersida.", "note": null, "noteType": "", "imgs": [{"src": "it1_underside.jpg", "alt": "Iteration 1: Undersidan sedd rakt underifrån. Starkt sug under huvudelementets framkant, svagt under bakre elementet.", "cap": "Undersidan sedd rakt underifrån. Starkt sug under huvudelementets framkant, svagt under bakre elementet.", "full": true}, {"src": "it1_sec_mid.jpg", "alt": "Iteration 1: Mitt på spannet: bubbla under huvudelementet och en stor avlöst vak bakom vingen.", "cap": "Mitt på spannet: bubbla under huvudelementet och en stor avlöst vak bakom vingen.", "full": false}, {"src": "it1_sep3d.jpg", "alt": "Iteration 1: Backflödesområden i 3D. Den stora vaken bakom mitten av vingen dominerar.", "cap": "Backflödesområden i 3D. Den stora vaken bakom mitten av vingen dominerar.", "full": false}]}, {"id": "it2", "n": 2, "geo": "Mainplane_5", "df": 951, "drag": 402, "ld": 2.3656716417910446, "sep": null, "cpmin": null, "cells": "–", "title": "Mer vinkel, och ett tydligt steg bakåt", "change": "För att få bakre elementet att arbeta ökade jag anfallsvinkeln med 5° på huvudelementet och 10° på bakre elementet, och höjde bakre elementet för att få in mer luft under det.", "obs": "Downforce föll till 951 N medan drag ökade till 402 N. Båda elementen fick tydlig separation: vinkeln på huvudelementet var för stor, och under bakre elementet kom det knappt in någon luft. Slutsatsen blev att sänka vinkeln fram och ge bakre elementet mer utrymme i höjdled.", "note": "Iteration 2 visas med krafter från SimScale. Resultatfälten för den här körningen ingår inte i bildanalysen.", "noteType": "info", "imgs": []}, {"id": "it3", "n": 3, "geo": "Mainplane_6", "df": 1752, "drag": 405, "ld": 4.325925925925926, "sep": 11.708235247777127, "cpmin": -4.100349170918367, "cells": "1,74 M", "title": "Lägre vinkel fram, mer luft under bakre elementet", "change": "Utifrån iteration 2 sänkte jag anfallsvinkeln på huvudelementet och flyttade upp bakre elementet så att luft kunde strömma in under det.", "obs": "Downforce ökade till cirka 1 750 N med i stort sett samma drag, en tydlig förbättring, och backflödet minskade med två tredjedelar. Nära ändplattorna ligger flödet an fint på bakre elementet. På huvudelementet finns fortfarande en separationsbubbla på bakre delen av undersidan, och mitt på spannet släpper bakre elementet.", "note": null, "noteType": "", "imgs": [{"src": "it3_sec_tip.jpg", "alt": "Iteration 3: Nära ändplattan (x = 0,40 m): bakre elementet har anliggande flöde.", "cap": "Nära ändplattan (x = 0,40 m): bakre elementet har anliggande flöde.", "full": false}, {"src": "it3_sec_mid.jpg", "alt": "Iteration 3: Mitt på spannet: bubbla under huvudelementet och avlöst flöde bakom bakre elementet.", "cap": "Mitt på spannet: bubbla under huvudelementet och avlöst flöde bakom bakre elementet.", "full": false}, {"src": "it3_underside.jpg", "alt": "Iteration 3: Undersidan: suget under huvudelementet är starkare än i iteration 1.", "cap": "Undersidan: suget under huvudelementet är starkare än i iteration 1.", "full": false}, {"src": "it3_sep3d.jpg", "alt": "Iteration 3: Backflöde i 3D. Vaken bakom vingen har krympt kraftigt.", "cap": "Backflöde i 3D. Vaken bakom vingen har krympt kraftigt.", "full": false}]}, {"id": "it4", "n": 4, "geo": "Mainplane_9", "df": 1774, "drag": 440, "ld": 4.031818181818182, "sep": 39.8080707752439, "cpmin": -3.8534375, "cells": "1,68 M", "title": "Längre korda fram, mer vinkel bak", "change": "Jag minskade anfallsvinkeln och ökade kordalängden på huvudelementet, och ökade anfallsvinkeln på bakre elementet.", "obs": "Downforce blev i stort sett densamma som i iteration 3 (1 774 mot 1 752 N, inom lösningens pendling) medan drag ökade. Separationsbubblan under huvudelementet finns kvar, och den större vinkeln bak gav en kraftigare avlöst vak mitt på spannet. Backflödet ökade till 40 L.", "note": "Den första körningen av den här geometrin divergerade: hastigheterna växte till över 80 000 m/s och krafterna till miljontals newton. Jag körde om geometrin, och resultaten här kommer från den konvergerade körningen.", "noteType": "", "imgs": [{"src": "it4_sec_tip.jpg", "alt": "Iteration 4: Nära ändplattan: separationsbubblan på huvudelementets undersida.", "cap": "Nära ändplattan: separationsbubblan på huvudelementets undersida.", "full": false}, {"src": "it4_sec_mid.jpg", "alt": "Iteration 4: Mitt på spannet: stor avlöst vak bakom bakre elementet.", "cap": "Mitt på spannet: stor avlöst vak bakom bakre elementet.", "full": false}, {"src": "it4_underside.jpg", "alt": "Iteration 4: Undersidan: suget har flyttat bakåt på det längre huvudelementet.", "cap": "Undersidan: suget har flyttat bakåt på det längre huvudelementet.", "full": false}, {"src": "it4_sep3d.jpg", "alt": "Iteration 4: Backflöde i 3D. Vaken har vuxit igen jämfört med iteration 3.", "cap": "Backflöde i 3D. Vaken har vuxit igen jämfört med iteration 3.", "full": false}]}, {"id": "it5", "n": 5, "geo": "Mainplane_10", "df": 1977, "drag": 465, "ld": 4.251612903225807, "sep": 7.498356172352676, "cpmin": -4.867304846938776, "cells": "1,46 M", "title": "Mindre vinkel fram: bästa resultatet", "change": "Jag minskade anfallsvinkeln på huvudelementet ytterligare för att få bort separationen jag såg i iteration 4.", "obs": "Downforce ökade till cirka 1 980 N, 13 % mer än iteration 3, och backflödet sjönk till 7,5 L, det lägsta i hela serien. Suget under huvudelementet är nu starkt över hela spannet (lägsta Cp −4,9). Bubblan på huvudelementets undersida är mindre men finns kvar, vilket pekar på att profilformen och inte vinkeln är det som begränsar. Mitt på spannet är bakre elementet fortfarande avlöst.", "note": null, "noteType": "", "imgs": [{"src": "it5_underside.jpg", "alt": "Iteration 5: Undersidan: ett starkt och jämnt sugband längs hela huvudelementet.", "cap": "Undersidan: ett starkt och jämnt sugband längs hela huvudelementet.", "full": true}, {"src": "it5_sec_mid.jpg", "alt": "Iteration 5: Mitt på spannet: liten bubbla fram, avlöst flöde på bakre elementets sugsida.", "cap": "Mitt på spannet: liten bubbla fram, avlöst flöde på bakre elementets sugsida.", "full": false}, {"src": "it5_sec_tip.jpg", "alt": "Iteration 5: Nära ändplattan: nästan helt anliggande flöde på båda elementen.", "cap": "Nära ändplattan: nästan helt anliggande flöde på båda elementen.", "full": false}]}]};
+const CONV = {"it1": [1060, 1209, 1289, 1058, 968, 1017, 1011, 1051, 1094, 1141, 1197, 1228, 1265, 1285, 1285, 1278, 1311, 1318, 1308, 1286, 1274, 1286, 1289, 1294, 1312, 1315, 1318, 1309, 1326, 1337, 1356, 1365, 1346, 1330, 1330, 1339, 1356, 1362, 1349, 1322, 1299, 1314, 1349, 1378, 1383, 1372, 1366, 1370, 1400, 1419, 1415, 1399, 1386, 1383, 1397, 1414, 1422, 1399, 1383, 1386, 1411, 1424, 1429, 1412, 1399, 1403, 1392, 1382, 1373, 1357, 1355, 1362, 1371, 1368, 1360, 1366, 1359, 1350, 1343, 1345, 1357, 1370, 1366, 1351, 1348, 1351, 1351, 1351, 1348, 1358, 1376, 1391, 1387, 1376, 1388, 1403, 1404, 1402, 1388, 1382], "it3": [1217, 1680, 1813, 1899, 1909, 1911, 1891, 1923, 1893, 1864, 1843, 1808, 1767, 1715, 1693, 1663, 1639, 1620, 1639, 1657, 1648, 1652, 1643, 1636, 1642, 1648, 1663, 1666, 1678, 1717, 1722, 1705, 1710, 1720, 1708, 1723, 1740, 1727, 1702, 1710, 1729, 1732, 1733, 1729, 1709, 1686, 1689, 1691, 1689, 1706, 1731, 1741, 1733, 1694, 1674, 1690, 1718, 1757, 1784, 1797, 1783, 1776, 1784, 1786, 1798, 1813, 1800, 1789, 1784, 1778, 1759, 1759, 1764, 1751, 1763, 1767, 1761, 1762, 1753, 1743, 1744, 1737, 1745, 1746, 1725, 1722, 1719, 1687, 1694, 1720, 1735, 1759, 1774, 1761, 1771, 1791, 1781, 1757, 1785, 1819], "it4": [1164, 1942, 1877, 1879, 1803, 1765, 1805, 1791, 1723, 1711, 1702, 1683, 1637, 1599, 1590, 1619, 1645, 1655, 1682, 1747, 1801, 1814, 1850, 1866, 1869, 1870, 1882, 1876, 1861, 1872, 1852, 1845, 1883, 1903, 1907, 1892, 1880, 1894, 1933, 1963, 1949, 1919, 1902, 1928, 1918, 1894, 1861, 1843, 1842, 1824, 1777, 1750, 1766, 1742, 1715, 1722, 1732, 1742, 1758, 1779, 1801, 1806, 1788, 1786, 1785, 1778, 1769, 1772, 1774, 1759, 1761, 1782, 1794, 1792, 1784, 1788, 1772, 1770, 1780, 1788, 1775, 1777, 1787, 1773, 1770, 1783, 1794, 1777, 1771, 1785, 1786, 1766, 1757, 1763, 1761, 1758, 1755, 1766, 1751, 1739], "it5": [1283, 1876, 1894, 1870, 1830, 1790, 1809, 1821, 1741, 1700, 1694, 1703, 1723, 1729, 1724, 1729, 1756, 1784, 1807, 1801, 1797, 1792, 1814, 1843, 1856, 1863, 1844, 1831, 1842, 1877, 1896, 1897, 1884, 1846, 1850, 1890, 1902, 1895, 1900, 1912, 1933, 1944, 1949, 1952, 1938, 1933, 1935, 1921, 1899, 1894, 1893, 1889, 1894, 1926, 1927, 1901, 1914, 1921, 1939, 1950, 1951, 1959, 1984, 1998, 2015, 2011, 2004, 2014, 2020, 1998, 1999, 2010, 1987, 1971, 1974, 1993, 1986, 1979, 1970, 1966, 1949, 1962, 1972, 1978, 1970, 1965, 1976, 1977, 1984, 1985, 1989, 1959, 1942, 1944, 1967, 1977, 1980, 1989, 1995, 2005], "it2": [817, 916, 946, 949, 951]};
+const COLORS = {it1:"var(--s1)", it2:"var(--s2)", it3:"var(--s3)", it4:"var(--s4)", it5:"var(--s5)"};
+const fmt = (v, d=0) => v.toLocaleString("sv-SE", {minimumFractionDigits:d, maximumFractionDigits:d});
+const NS = "http://www.w3.org/2000/svg";
+const el = (t, a={}, p) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; };
+const tip = document.getElementById("tip");
+function showTip(host, html, x, y) { tip.innerHTML = html; tip.style.opacity = 1; const r = host.getBoundingClientRect(); tip.style.left = (window.scrollX + r.left + x + 12) + "px"; tip.style.top = (window.scrollY + r.top + y - 10) + "px"; }
+function hideTip() { tip.style.opacity = 0; }
+tip.style.position = "absolute";
+
+function niceMax(v) { const p = Math.pow(10, Math.floor(Math.log10(v))); const s = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find(s => s*p >= v); return s*p; }
+
+function bar(id, key, unit, dec, best) {
+  const host = document.getElementById(id);
+  const W = 360, H = 220, L = 44, R = 8, T = 18, B = 26;
+  const svg = el("svg", {viewBox:`0 0 ${W} ${H}`, role:"img", "aria-label": host.querySelector("h3").textContent}, host);
+  const rows = DATA.iters.filter(d => d[key] != null);
+  const max = niceMax(Math.max(...rows.map(d => d[key])) * 1.08);
+  const y = v => T + (H-T-B) * (1 - v/max);
+  for (let i = 0; i <= 5; i++) { const v = max*i/5; el("line", {x1:L, x2:W-R, y1:y(v), y2:y(v), stroke:"#222a37"}, svg); const t = el("text", {x:L-6, y:y(v)+4, "text-anchor":"end", fill:"#6f7a8c", "font-size":11, "font-family":"IBM Plex Mono"}, svg); t.textContent = fmt(v, max <= 5 ? 1 : 0); }
+  const bw = (W-L-R)/rows.length;
+  rows.forEach((d, i) => {
+    const x = L + i*bw + bw*0.2, w = bw*0.6, top = y(d[key]), h = y(0) - top;
+    const isBest = d.id === best;
+    const path = `M${x},${y(0)} V${top+4} q0,-4 4,-4 h${w-8} q4,0 4,4 V${y(0)} Z`;
+    el("path", {d:path, fill: isBest ? "#4cc3e0" : "#3a4a63"}, svg);
+    const lab = el("text", {x:x+w/2, y:top-6, "text-anchor":"middle", fill: isBest ? "#e8ecf2" : "#a9b3c3", "font-size":12, "font-family":"IBM Plex Mono"}, svg); lab.textContent = fmt(d[key], dec);
+    const xl = el("text", {x:x+w/2, y:H-8, "text-anchor":"middle", fill:"#a9b3c3", "font-size":12, "font-family":"IBM Plex Mono"}, svg); xl.textContent = "It " + d.n;
+    const hit = el("rect", {x:L+i*bw, y:T, width:bw, height:H-T-B, fill:"transparent"}, svg);
+    hit.addEventListener("mousemove", e => { const r = host.getBoundingClientRect(); showTip(host, `Iteration ${d.n}<br>${fmt(d[key], dec)} ${unit}`, e.clientX - r.left, e.clientY - r.top); });
+    hit.addEventListener("mouseleave", hideTip);
+  });
+}
+
+function conv() {
+  const host = document.getElementById("c-conv");
+  const W = 1100, H = 300, L = 52, R = 70, T = 14, B = 30;
+  const svg = el("svg", {viewBox:`0 0 ${W} ${H}`, role:"img", "aria-label":"Konvergens av downforce"}, host);
+  const ymin = 800, ymax = 2200;
+  const x = i => L + (W-L-R) * i / 1000, y = v => T + (H-T-B) * (1 - (v-ymin)/(ymax-ymin));
+  for (let v = ymin; v <= ymax; v += 200) { el("line", {x1:L, x2:W-R, y1:y(v), y2:y(v), stroke:"#222a37"}, svg); const t = el("text", {x:L-8, y:y(v)+4, "text-anchor":"end", fill:"#6f7a8c", "font-size":12, "font-family":"IBM Plex Mono"}, svg); t.textContent = fmt(v); }
+  for (let i = 0; i <= 1000; i += 200) { const t = el("text", {x:x(i), y:H-8, "text-anchor":"middle", fill:"#6f7a8c", "font-size":12, "font-family":"IBM Plex Mono"}, svg); t.textContent = i; }
+  const leg = document.getElementById("conv-legend");
+  const series = {};
+  ["it1","it2","it3","it4","it5"].forEach(k => {
+    const d = CONV[k]; const n = d.length; const xs = d.map((_, i) => (i+1) * 1000 / n);
+    series[k] = {xs, d};
+    const col = COLORS[k];
+    if (n > 10) {
+      el("path", {d: d.map((v, i) => `${i ? "L" : "M"}${x(xs[i]).toFixed(1)},${y(Math.max(ymin, v)).toFixed(1)}`).join(""), fill:"none", stroke:col, "stroke-width":2, "stroke-linejoin":"round"}, svg);
+    } else {
+      d.forEach((v, i) => el("circle", {cx:x(xs[i]), cy:y(v), r:4.5, fill:col, stroke:"#10141c", "stroke-width":2}, svg));
+    }
+    const last = d[n-1]; const t = el("text", {x:W-R+8, y:y(last)+4, fill:"#a9b3c3", "font-size":12, "font-family":"IBM Plex Mono"}, svg); t.textContent = "It " + k.slice(2);
+    leg.insertAdjacentHTML("beforeend", `<span><i style="background:${col}"></i>Iteration ${k.slice(2)}</span>`);
+  });
+  // fix label collisions on the right edge
+  const labels = [...svg.querySelectorAll("text")].filter(t => +t.getAttribute("x") === W-R+8).sort((a,b) => a.getAttribute("y") - b.getAttribute("y"));
+  for (let i = 1; i < labels.length; i++) { const p = +labels[i-1].getAttribute("y"), c = +labels[i].getAttribute("y"); if (c - p < 14) labels[i].setAttribute("y", p + 14); }
+  const cross = el("line", {y1:T, y2:H-B, stroke:"#6f7a8c", "stroke-dasharray":"3 3", opacity:0}, svg);
+  const hit = el("rect", {x:L, y:T, width:W-L-R, height:H-T-B, fill:"transparent"}, svg);
+  hit.addEventListener("mousemove", e => {
+    const r = svg.getBoundingClientRect(); const sx = (e.clientX - r.left) * W / r.width; const it = Math.round(Math.min(1000, Math.max(0, (sx - L) / (W-L-R) * 1000)));
+    cross.setAttribute("x1", x(it)); cross.setAttribute("x2", x(it)); cross.setAttribute("opacity", 1);
+    let html = `Lösariteration ${it}`;
+    ["it1","it2","it3","it4","it5"].forEach(k => { const s = series[k]; let bi = 0, bd = 1e9; s.xs.forEach((xx, i) => { const dd = Math.abs(xx - it); if (dd < bd) { bd = dd; bi = i; } }); if (bd <= (s.d.length > 10 ? 10 : 100)) html += `<br><span style="color:${COLORS[k]}">■</span> It ${k.slice(2)}: ${fmt(s.d[bi])} N`; });
+    const hr = host.getBoundingClientRect(); showTip(host, html, e.clientX - hr.left, e.clientY - hr.top);
+  });
+  hit.addEventListener("mouseleave", () => { hideTip(); cross.setAttribute("opacity", 0); });
+}
+
+function table() {
+  const tb = document.getElementById("tbody");
+  DATA.iters.forEach(d => {
+    tb.insertAdjacentHTML("beforeend", `<tr class="${d.id === "it5" ? "best" : ""}"><td>Iteration ${d.n}</td><td class="num">${d.geo}</td><td class="num">${fmt(d.df)}</td><td class="num">${fmt(d.drag)}</td><td class="num">${fmt(d.ld, 2)}</td><td class="num">${d.sep == null ? "–" : fmt(d.sep, 1)}</td><td class="num">${d.cpmin == null ? "–" : fmt(d.cpmin, 2)}</td><td class="num">${d.cells}</td></tr>`);
+  });
+}
+
+function iters() {
+  const host = document.getElementById("iters");
+  DATA.iters.forEach((d, i) => {
+    const prev = DATA.iters[i-1];
+    const delta = (a, b, inv) => { if (!b) return ""; const p = (a-b)/b*100; const good = inv ? p < 0 : p > 0; return `<span class="delta ${good ? "up" : "down"}">${p > 0 ? "+" : ""}${fmt(p, 0)} % mot it ${prev.n}</span>`; };
+    const imgs = d.imgs.map(im => `<figure class="${im.full ? "full" : ""}"><img src="img/${im.src}" alt="${im.alt}" data-zoom><figcaption>${im.cap}</figcaption></figure>`).join("");
+    host.insertAdjacentHTML("beforeend", `
+      <article class="iter" id="iteration-${d.n}">
+        <div class="tag"><span class="sw" style="background:${COLORS[d.id]}"></span><span class="n">${String(d.n).padStart(2, "0")}</span><span class="geo">${d.geo}</span></div>
+        <div class="body">
+          <h3>${d.title}</h3>
+          <div class="facts">
+            <div class="fact"><span class="k">Downforce</span><span class="val num">${fmt(d.df)} N</span>${delta(d.df, prev && prev.df)}</div>
+            <div class="fact"><span class="k">Drag</span><span class="val num">${fmt(d.drag)} N</span>${delta(d.drag, prev && prev.drag, true)}</div>
+            <div class="fact"><span class="k">L/D</span><span class="val num">${fmt(d.ld, 2)}</span>${delta(d.ld, prev && prev.ld)}</div>
+            ${d.sep != null ? `<div class="fact"><span class="k">Backflöde</span><span class="val num">${fmt(d.sep, 1)} L</span></div>` : ""}
+          </div>
+          <div class="what">
+            <div><h4>Ändring</h4><p>${d.change}</p></div>
+            <div><h4>Vad flödet visade</h4><p>${d.obs}</p></div>
+          </div>
+          ${d.note ? `<p class="note ${d.noteType || ""}">${d.note}</p>` : ""}
+          ${imgs ? `<div class="gallery">${imgs}</div>` : ""}
+        </div>
+      </article>`);
+  });
+}
+
+bar("c-df", "df", "N", 0, "it5");
+bar("c-ld", "ld", "", 2, "it3");
+bar("c-sep", "sep", "L", 1, "it5");
+conv(); table(); iters();
+
+const lb = document.getElementById("lb"), lbImg = lb.querySelector("img");
+document.addEventListener("click", e => { const t = e.target.closest("img[data-zoom]"); if (t) { lbImg.src = t.src; lbImg.alt = t.alt; lb.classList.add("open"); } });
+lb.addEventListener("click", () => lb.classList.remove("open"));
+document.addEventListener("keydown", e => { if (e.key === "Escape") lb.classList.remove("open"); });
+</script>
+</body>
+</html>
